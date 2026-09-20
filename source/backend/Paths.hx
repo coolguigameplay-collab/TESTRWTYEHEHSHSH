@@ -23,83 +23,53 @@ import sys.FileSystem;
 import sys.io.File;
 #end
 
+#if MODS_ALLOWED
+import backend.Mods;
+#end
+
+@:access(openfl.display.BitmapData)
 class Paths
 {
-	/*
-	 * =========================================================
-	 * BFEXEOPT STANDALONE CONTENT SYSTEM
-	 * =========================================================
-	 *
-	 * All mod/game content is expected to be packaged as:
-	 *
-	 * assets/BFEXEOPT/
-	 *
-	 * project.xml:
-	 *
-	 * <assets path="assets/BFEXEOPT" rename="BFEXEOPT" />
-	 *
-	 * The engine will NEVER use the external "mods/" folder
-	 * as the main content source.
-	 *
-	 * BFEXEOPT is intentionally fixed.
-	 */
+	// ============================================================
+	// BFEXEOPT ENGINE CONTENT
+	// ============================================================
 
 	inline public static var GAME_CONTENT:String = "BFEXEOPT";
 
-	inline public static var SOUND_EXT =
+	inline public static var SOUND_EXT:String =
 		#if web
 			"mp3"
 		#else
 			"ogg"
 		#end
+	;
 
-	inline public static var VIDEO_EXT = "mp4";
+	inline public static var VIDEO_EXT:String = "mp4";
 
-	/*
-	 * ---------------------------------------------------------
-	 * BFEXEOPT PATH HELPERS
-	 * ---------------------------------------------------------
-	 */
+	// ============================================================
+	// BFEXEOPT PATH HELPERS
+	// ============================================================
 
-	inline static public function getGameContentPath(file:String = '')
+	inline public static function getGameContentPath(file:String = ""):String
 	{
 		if (file == null || file.length == 0)
 			return GAME_CONTENT;
 
-		return GAME_CONTENT + '/' + file;
+		return GAME_CONTENT + "/" + file;
 	}
 
-	/**
-	 * Checks whether a packaged BFEXEOPT asset exists.
-	 */
-	inline static public function gameContentExists(file:String, type:AssetType = TEXT):Bool
+	public static function gameContentExists(
+		file:String,
+		?type:AssetType = TEXT
+	):Bool
 	{
-		return OpenFlAssets.exists(getGameContentPath(file), type);
+		var path:String = getGameContentPath(file);
+		return OpenFlAssets.exists(path, type);
 	}
 
-	/**
-	 * Returns a BFEXEOPT path for a normal asset.
-	 *
-	 * Example:
-	 * getGamePath("images/menuBG.png")
-	 *
-	 * -> BFEXEOPT/images/menuBG.png
-	 */
-	inline static public function getGamePath(file:String, ?parentfolder:String):String
-	{
-		var path:String = file;
-
-		if (parentfolder != null && parentfolder.length > 0)
-			path = parentfolder + '/' + file;
-
-		return getGameContentPath(path);
-	}
-
-	/*
-	 * =========================================================
-	 * MEMORY / CACHE
-	 * =========================================================
-	 */
+	// ============================================================
+	// MEMORY / CACHE
+	// ============================================================
 
 	public static function excludeAsset(key:String)
 	{
@@ -112,6 +82,7 @@ class Paths
 		'assets/shared/mobile/touchpad/bg.png'
 	];
 
+	// haya I love you for the base cache dump I took to the max
 	public static function clearUnusedMemory()
 	{
 		for (key in currentTrackedAssets.keys())
@@ -143,9 +114,11 @@ class Paths
 
 		for (key => asset in currentTrackedSounds)
 		{
-			if (!localTrackedAssets.contains(key)
+			if (
+				!localTrackedAssets.contains(key)
 				&& !dumpExclusions.contains(key)
-				&& asset != null)
+				&& asset != null
+			)
 			{
 				Assets.cache.clear(key);
 				currentTrackedSounds.remove(key);
@@ -215,9 +188,11 @@ class Paths
 
 	inline static function destroyGraphic(graphic:FlxGraphic)
 	{
-		if (graphic != null
+		if (
+			graphic != null
 			&& graphic.bitmap != null
-			&& graphic.bitmap.__texture != null)
+			&& graphic.bitmap.__texture != null
+		)
 		{
 			graphic.bitmap.__texture.dispose();
 		}
@@ -225,30 +200,20 @@ class Paths
 		FlxG.bitmap.remove(graphic);
 	}
 
-	/*
-	 * =========================================================
-	 * LEVEL
-	 * =========================================================
-	 */
+	// ============================================================
+	// CURRENT LEVEL
+	// ============================================================
 
 	static public var currentLevel:String;
 
 	public static function setCurrentLevel(name:String)
+	{
 		currentLevel = name.toLowerCase();
+	}
 
-	/*
-	 * =========================================================
-	 * MAIN PATH RESOLVER
-	 * =========================================================
-	 *
-	 * Priority:
-	 *
-	 * 1. BFEXEOPT packaged content
-	 * 2. currentLevel inside normal engine assets
-	 * 3. shared engine assets
-	 *
-	 * External mods/ folder is intentionally NOT checked.
-	 */
+	// ============================================================
+	// MAIN PATH RESOLVER
+	// ============================================================
 
 	public static function getPath(
 		file:String,
@@ -257,48 +222,65 @@ class Paths
 		?modsAllowed:Bool = true
 	):String
 	{
-		/*
-		 * BFEXEOPT CONTENT
-		 *
-		 * If parentfolder exists:
-		 *
-		 * BFEXEOPT/<parentfolder>/<file>
-		 *
-		 * Otherwise:
-		 *
-		 * BFEXEOPT/<file>
-		 */
+		// --------------------------------------------------------
+		// 1. BFEXEOPT
+		// --------------------------------------------------------
+		// This is the main packaged mod/content location.
+		//
+		// Example:
+		// BFEXEOPT/images/menu.png
+		// BFEXEOPT/data/week.json
+		// BFEXEOPT/songs/song/Inst.ogg
+		// --------------------------------------------------------
 
-		var gamePath:String = getGamePath(file, parentfolder);
+		var gameFile:String = file;
+
+		if (parentfolder != null && parentfolder.length > 0)
+			gameFile = parentfolder + "/" + file;
+
+		var gamePath:String = getGameContentPath(gameFile);
 
 		if (OpenFlAssets.exists(gamePath, type))
 			return gamePath;
 
-		/*
-		 * Mobile is still handled by the normal shared engine
-		 * assets. This keeps Psych Engine's mobile controls
-		 * working.
-		 */
+		// --------------------------------------------------------
+		// 2. Legacy external MODS system
+		// --------------------------------------------------------
+
+		#if MODS_ALLOWED
+		if (modsAllowed)
+		{
+			var customFile:String = file;
+
+			if (parentfolder != null)
+				customFile = '$parentfolder/$file';
+
+			var modded:String = modFolders(customFile);
+
+			#if sys
+			if (FileSystem.exists(modded))
+				return modded;
+			#end
+		}
+		#end
+
+		// --------------------------------------------------------
+		// 3. Mobile shared assets
+		// --------------------------------------------------------
 
 		if (parentfolder == "mobile")
 			return getSharedPath('mobile/$file');
 
-		/*
-		 * If the requested parent folder is an engine folder,
-		 * check the normal assets directory.
-		 */
+		// --------------------------------------------------------
+		// 4. Explicit parent folder
+		// --------------------------------------------------------
 
 		if (parentfolder != null)
-		{
-			var folderPath:String = getFolderPath(file, parentfolder);
+			return getFolderPath(file, parentfolder);
 
-			if (OpenFlAssets.exists(folderPath, type))
-				return folderPath;
-		}
-
-		/*
-		 * Current level fallback.
-		 */
+		// --------------------------------------------------------
+		// 5. Current level
+		// --------------------------------------------------------
 
 		if (currentLevel != null && currentLevel != 'shared')
 		{
@@ -308,78 +290,113 @@ class Paths
 				return levelPath;
 		}
 
-		/*
-		 * Final fallback: shared engine assets.
-		 */
+		// --------------------------------------------------------
+		// 6. Normal shared engine assets
+		// --------------------------------------------------------
 
 		return getSharedPath(file);
 	}
 
+	// ============================================================
+	// BASIC PATH HELPERS
+	// ============================================================
+
 	inline static public function getFolderPath(
 		file:String,
 		folder:String = "shared"
-	)
+	):String
 	{
 		return 'assets/$folder/$file';
 	}
 
-	inline public static function getSharedPath(file:String = '')
+	inline public static function getSharedPath(
+		file:String = ''
+	):String
 	{
 		return 'assets/shared/$file';
 	}
 
-	/*
-	 * =========================================================
-	 * TEXT / DATA
-	 * =========================================================
-	 */
+	// ============================================================
+	// TEXT / DATA
+	// ============================================================
 
-	inline static public function txt(key:String, ?folder:String)
-		return getPath('data/$key.txt', TEXT, folder, false);
+	inline static public function txt(
+		key:String,
+		?folder:String
+	)
+	{
+		return getPath('data/$key.txt', TEXT, folder, true);
+	}
 
-	inline static public function xml(key:String, ?folder:String)
-		return getPath('data/$key.xml', TEXT, folder, false);
+	inline static public function xml(
+		key:String,
+		?folder:String
+	)
+	{
+		return getPath('data/$key.xml', TEXT, folder, true);
+	}
 
-	inline static public function json(key:String, ?folder:String)
-		return getPath('data/$key.json', TEXT, folder, false);
+	inline static public function json(
+		key:String,
+		?folder:String
+	)
+	{
+		return getPath('data/$key.json', TEXT, folder, true);
+	}
 
-	inline static public function shaderFragment(key:String, ?folder:String)
-		return getPath('shaders/$key.frag', TEXT, folder, false);
+	inline static public function shaderFragment(
+		key:String,
+		?folder:String
+	)
+	{
+		return getPath('shaders/$key.frag', TEXT, folder, true);
+	}
 
-	inline static public function shaderVertex(key:String, ?folder:String)
-		return getPath('shaders/$key.vert', TEXT, folder, false);
+	inline static public function shaderVertex(
+		key:String,
+		?folder:String
+	)
+	{
+		return getPath('shaders/$key.vert', TEXT, folder, true);
+	}
 
-	inline static public function lua(key:String, ?folder:String)
-		return getPath('$key.lua', TEXT, folder, false);
+	inline static public function lua(
+		key:String,
+		?folder:String
+	)
+	{
+		return getPath('$key.lua', TEXT, folder, true);
+	}
 
-	/*
-	 * =========================================================
-	 * VIDEO
-	 * =========================================================
-	 */
+	// ============================================================
+	// VIDEO
+	// ============================================================
 
 	static public function video(key:String)
 	{
-		var packaged:String = getGamePath(
+		// BFEXEOPT first
+		var gameVideo:String = getGameContentPath(
 			'videos/$key.$VIDEO_EXT'
 		);
 
-		if (OpenFlAssets.exists(packaged, AssetType.BINARY))
-			return packaged;
+		if (OpenFlAssets.exists(gameVideo, BINARY))
+			return gameVideo;
 
-		var shared:String = 'assets/videos/$key.$VIDEO_EXT';
+		#if MODS_ALLOWED
+		var file:String = modsVideo(key);
 
-		if (OpenFlAssets.exists(shared, AssetType.BINARY))
-			return shared;
+		#if sys
+		if (FileSystem.exists(file))
+			return file;
+		#end
+		#end
 
-		return packaged;
+		return 'assets/videos/$key.$VIDEO_EXT';
 	}
 
-	/*
-	 * =========================================================
-	 * SOUND
-	 * =========================================================
-	 */
+	// ============================================================
+	// SOUNDS
+	// ============================================================
 
 	inline static public function sound(
 		key:String,
@@ -389,7 +406,7 @@ class Paths
 		return returnSound(
 			'sounds/$key',
 			null,
-			false
+			modsAllowed
 		);
 	}
 
@@ -401,7 +418,7 @@ class Paths
 		return returnSound(
 			'music/$key',
 			null,
-			false
+			modsAllowed
 		);
 	}
 
@@ -413,7 +430,7 @@ class Paths
 		return returnSound(
 			'${formatToSongPath(song)}/Inst',
 			'songs',
-			false
+			modsAllowed
 		);
 	}
 
@@ -432,7 +449,7 @@ class Paths
 		return returnSound(
 			songKey,
 			'songs',
-			false,
+			modsAllowed,
 			false
 		);
 	}
@@ -446,15 +463,13 @@ class Paths
 	{
 		return sound(
 			key + FlxG.random.int(min, max),
-			false
+			modsAllowed
 		);
 	}
 
-	/*
-	 * =========================================================
-	 * IMAGE CACHE
-	 * =========================================================
-	 */
+	// ============================================================
+	// IMAGE CACHE
+	// ============================================================
 
 	public static var currentTrackedAssets:Map<String, FlxGraphic> = [];
 
@@ -464,10 +479,9 @@ class Paths
 		?allowGPU:Bool = true
 	):FlxGraphic
 	{
-		key =
-			Language.getFileTranslation(
-				'images/$key'
-			) + '.png';
+		key = Language.getFileTranslation(
+			'images/$key'
+		) + '.png';
 
 		var bitmap:BitmapData = null;
 
@@ -487,32 +501,36 @@ class Paths
 
 	public static function cacheBitmap(
 		key:String,
-		?parentFolder:String,
+		?parentFolder:String = null,
 		?bitmap:BitmapData,
 		?allowGPU:Bool = true
 	):FlxGraphic
 	{
 		if (bitmap == null)
 		{
-			var file:String =
-				getPath(
-					key,
-					IMAGE,
-					parentFolder,
-					false
-				);
+			var file:String = getPath(
+				key,
+				IMAGE,
+				parentFolder,
+				true
+			);
 
+			#if sys
+			if (FileSystem.exists(file))
+			{
+				bitmap = BitmapData.fromFile(file);
+			}
+			else
+			#end
 			if (OpenFlAssets.exists(file, IMAGE))
-				bitmap =
-					OpenFlAssets.getBitmapData(file);
+			{
+				bitmap = OpenFlAssets.getBitmapData(file);
+			}
 
 			if (bitmap == null)
 			{
 				trace(
-					'Bitmap not found: '
-					+ file
-					+ ' | key: '
-					+ key
+					'Bitmap not found: $file | key: $key'
 				);
 
 				return null;
@@ -530,14 +548,11 @@ class Paths
 			if (bitmap.__texture == null)
 			{
 				bitmap.image.premultiplied = true;
-				bitmap.getTexture(
-					FlxG.stage.context3D
-				);
+				bitmap.getTexture(FlxG.stage.context3D);
 			}
 
 			bitmap.getSurface();
 			bitmap.disposeImage();
-
 			bitmap.image.data = null;
 			bitmap.image = null;
 			bitmap.readable = true;
@@ -553,43 +568,36 @@ class Paths
 		graph.persist = true;
 		graph.destroyOnNoUse = false;
 
-		currentTrackedAssets.set(
-			key,
-			graph
-		);
-
+		currentTrackedAssets.set(key, graph);
 		localTrackedAssets.push(key);
 
 		return graph;
 	}
 
-	/*
-	 * =========================================================
-	 * TEXT FILE READING
-	 * =========================================================
-	 */
+	// ============================================================
+	// TEXT FILE LOADING
+	// ============================================================
 
 	inline static public function getTextFromFile(
 		key:String,
 		?ignoreMods:Bool = false
 	):String
 	{
-		var path:String =
-			getPath(
-				key,
-				TEXT,
-				null,
-				false
-			);
+		// IMPORTANT:
+		// The previous version passed !ignoreMods as parentFolder.
+		// This version passes it correctly as modsAllowed.
+
+		var path:String = getPath(
+			key,
+			TEXT,
+			null,
+			!ignoreMods
+		);
 
 		#if sys
-		if (FileSystem.exists(path))
-			return File.getContent(path);
-
-		if (OpenFlAssets.exists(path, TEXT))
-			return Assets.getText(path);
-
-		return null;
+		return FileSystem.exists(path)
+			? File.getContent(path)
+			: null;
 		#else
 		return OpenFlAssets.exists(path, TEXT)
 			? Assets.getText(path)
@@ -597,11 +605,9 @@ class Paths
 		#end
 	}
 
-	/*
-	 * =========================================================
-	 * FONT
-	 * =========================================================
-	 */
+	// ============================================================
+	// FONT
+	// ============================================================
 
 	inline static public function font(key:String)
 	{
@@ -610,28 +616,28 @@ class Paths
 				'fonts/$key'
 			);
 
-		/*
-		 * BFEXEOPT font first.
-		 */
-
-		var packaged:String =
+		// BFEXEOPT first
+		var gameFont:String =
 			getGameContentPath(folderKey);
 
-		if (OpenFlAssets.exists(packaged, AssetType.FONT))
-			return packaged;
+		if (OpenFlAssets.exists(gameFont, FONT))
+			return gameFont;
 
-		/*
-		 * Shared engine font fallback.
-		 */
+		#if MODS_ALLOWED
+		var file:String = modFolders(folderKey);
+
+		#if sys
+		if (FileSystem.exists(file))
+			return file;
+		#end
+		#end
 
 		return 'assets/$folderKey';
 	}
 
-	/*
-	 * =========================================================
-	 * FILE EXISTS
-	 * =========================================================
-	 */
+	// ============================================================
+	// FILE EXISTS
+	// ============================================================
 
 	public static function fileExists(
 		key:String,
@@ -640,42 +646,100 @@ class Paths
 		?parentFolder:String = null
 	)
 	{
-		/*
-		 * BFEXEOPT first.
-		 */
+		// BFEXEOPT first
+		var gameKey:String = key;
 
-		var packaged:String =
-			getGamePath(
-				key,
-				parentFolder
-			);
+		if (parentFolder != null)
+			gameKey = '$parentFolder/$key';
 
-		if (OpenFlAssets.exists(packaged, type))
+		if (
+			OpenFlAssets.exists(
+				getGameContentPath(gameKey),
+				type
+			)
+		)
+		{
 			return true;
+		}
 
-		/*
-		 * Shared/engine fallback.
-		 */
+		#if MODS_ALLOWED
+		if (!ignoreMods)
+		{
+			var modKey:String = key;
 
-		var normal:String =
+			if (parentFolder == 'songs')
+				modKey = 'songs/$key';
+
+			for (mod in Mods.getGlobalMods())
+			{
+				#if sys
+				if (
+					FileSystem.exists(
+						mods('$mod/$modKey')
+					)
+				)
+				{
+					return true;
+				}
+
+				#if linux
+				else if (
+					FileSystem.exists(
+						findFile('$mod/$modKey')
+					)
+				)
+				{
+					return true;
+				}
+				#end
+				#end
+			}
+
+			#if sys
+			if (
+				FileSystem.exists(
+					mods(
+						Mods.currentModDirectory
+						+ '/'
+						+ modKey
+					)
+				)
+				|| FileSystem.exists(
+					mods(modKey)
+				)
+			)
+			{
+				return true;
+			}
+
+			#if linux
+			else if (
+				FileSystem.exists(
+					findFile(modKey)
+				)
+			)
+			{
+				return true;
+			}
+			#end
+			#end
+		}
+		#end
+
+		return OpenFlAssets.exists(
 			getPath(
 				key,
 				type,
 				parentFolder,
 				false
-			);
-
-		return OpenFlAssets.exists(
-			normal,
+			),
 			type
 		);
 	}
 
-	/*
-	 * =========================================================
-	 * ATLAS
-	 * =========================================================
-	 */
+	// ============================================================
+	// ATLAS
+	// ============================================================
 
 	static public function getAtlas(
 		key:String,
@@ -683,6 +747,8 @@ class Paths
 		?allowGPU:Bool = true
 	):FlxAtlasFrames
 	{
+		var useMod:Bool = false;
+
 		var imageLoaded:FlxGraphic =
 			image(
 				key,
@@ -690,47 +756,70 @@ class Paths
 				allowGPU
 			);
 
-		if (imageLoaded == null)
-			return null;
-
-		/*
-		 * Sparrow XML
-		 */
-
-		var myXml:String =
+		var myXml:Dynamic =
 			getPath(
 				'images/$key.xml',
 				TEXT,
 				parentFolder,
-				false
+				true
 			);
 
-		if (OpenFlAssets.exists(myXml, TEXT))
+		if (
+			OpenFlAssets.exists(myXml, TEXT)
+			#if MODS_ALLOWED
+			|| (
+				FileSystem.exists(myXml)
+				&& (useMod = true)
+			)
+			#end
+		)
 		{
+			#if MODS_ALLOWED
+			return FlxAtlasFrames.fromSparrow(
+				imageLoaded,
+				useMod
+					? File.getContent(myXml)
+					: myXml
+			);
+			#else
 			return FlxAtlasFrames.fromSparrow(
 				imageLoaded,
 				myXml
 			);
+			#end
 		}
 
-		/*
-		 * TexturePacker JSON
-		 */
-
-		var myJson:String =
+		var myJson:Dynamic =
 			getPath(
 				'images/$key.json',
 				TEXT,
 				parentFolder,
-				false
+				true
 			);
 
-		if (OpenFlAssets.exists(myJson, TEXT))
+		if (
+			OpenFlAssets.exists(myJson, TEXT)
+			#if MODS_ALLOWED
+			|| (
+				FileSystem.exists(myJson)
+				&& (useMod = true)
+			)
+			#end
+		)
 		{
+			#if MODS_ALLOWED
+			return FlxAtlasFrames.fromTexturePackerJson(
+				imageLoaded,
+				useMod
+					? File.getContent(myJson)
+					: myJson
+			);
+			#else
 			return FlxAtlasFrames.fromTexturePackerJson(
 				imageLoaded,
 				myJson
 			);
+			#end
 		}
 
 		return getPackerAtlas(
@@ -740,11 +829,9 @@ class Paths
 		);
 	}
 
-	/*
-	 * =========================================================
-	 * MULTI ATLAS
-	 * =========================================================
-	 */
+	// ============================================================
+	// MULTI ATLAS
+	// ============================================================
 
 	static public function getMultiAtlas(
 		keys:Array<String>,
@@ -752,18 +839,10 @@ class Paths
 		?allowGPU:Bool = true
 	):FlxAtlasFrames
 	{
-		if (keys == null || keys.length == 0)
-			return null;
-
 		var parentFrames:FlxAtlasFrames =
 			Paths.getAtlas(
-				keys[0].trim(),
-				parentFolder,
-				allowGPU
+				keys[0].trim()
 			);
-
-		if (parentFrames == null)
-			return null;
 
 		if (keys.length > 1)
 		{
@@ -800,11 +879,9 @@ class Paths
 		return parentFrames;
 	}
 
-	/*
-	 * =========================================================
-	 * SPARROW
-	 * =========================================================
-	 */
+	// ============================================================
+	// SPARROW ATLAS
+	// ============================================================
 
 	inline static public function getSparrowAtlas(
 		key:String,
@@ -812,6 +889,13 @@ class Paths
 		?allowGPU:Bool = true
 	):FlxAtlasFrames
 	{
+		if (key.contains('psychic'))
+			trace(
+				key,
+				parentFolder,
+				allowGPU
+			);
+
 		var imageLoaded:FlxGraphic =
 			image(
 				key,
@@ -819,40 +903,43 @@ class Paths
 				allowGPU
 			);
 
-		if (imageLoaded == null)
-			return null;
+		#if MODS_ALLOWED
+		var xmlExists:Bool = false;
 
-		var xmlPath:String =
+		var xml:String = modsXml(key);
+
+		if (FileSystem.exists(xml))
+			xmlExists = true;
+
+		return FlxAtlasFrames.fromSparrow(
+			imageLoaded,
+			xmlExists
+				? File.getContent(xml)
+				: getPath(
+					Language.getFileTranslation(
+						'images/$key'
+					) + '.xml',
+					TEXT,
+					parentFolder
+				)
+		);
+		#else
+		return FlxAtlasFrames.fromSparrow(
+			imageLoaded,
 			getPath(
 				Language.getFileTranslation(
 					'images/$key'
 				) + '.xml',
 				TEXT,
-				parentFolder,
-				false
-			);
-
-		if (!OpenFlAssets.exists(xmlPath, TEXT))
-		{
-			trace(
-				'Sparrow XML not found: '
-				+ xmlPath
-			);
-
-			return null;
-		}
-
-		return FlxAtlasFrames.fromSparrow(
-			imageLoaded,
-			xmlPath
+				parentFolder
+			)
 		);
+		#end
 	}
 
-	/*
-	 * =========================================================
-	 * TEXTURE PACKER
-	 * =========================================================
-	 */
+	// ============================================================
+	// PACKER ATLAS
+	// ============================================================
 
 	inline static public function getPackerAtlas(
 		key:String,
@@ -867,40 +954,43 @@ class Paths
 				allowGPU
 			);
 
-		if (imageLoaded == null)
-			return null;
+		#if MODS_ALLOWED
+		var txtExists:Bool = false;
 
-		var txtPath:String =
+		var txt:String = modsTxt(key);
+
+		if (FileSystem.exists(txt))
+			txtExists = true;
+
+		return FlxAtlasFrames.fromSpriteSheetPacker(
+			imageLoaded,
+			txtExists
+				? File.getContent(txt)
+				: getPath(
+					Language.getFileTranslation(
+						'images/$key'
+					) + '.txt',
+					TEXT,
+					parentFolder
+				)
+		);
+		#else
+		return FlxAtlasFrames.fromSpriteSheetPacker(
+			imageLoaded,
 			getPath(
 				Language.getFileTranslation(
 					'images/$key'
 				) + '.txt',
 				TEXT,
-				parentFolder,
-				false
-			);
-
-		if (!OpenFlAssets.exists(txtPath, TEXT))
-		{
-			trace(
-				'Packer TXT not found: '
-				+ txtPath
-			);
-
-			return null;
-		}
-
-		return FlxAtlasFrames.fromSpriteSheetPacker(
-			imageLoaded,
-			txtPath
+				parentFolder
+			)
 		);
+		#end
 	}
 
-	/*
-	 * =========================================================
-	 * ASEPRITE / JSON ATLAS
-	 * =========================================================
-	 */
+	// ============================================================
+	// ASEPRITE ATLAS
+	// ============================================================
 
 	inline static public function getAsepriteAtlas(
 		key:String,
@@ -915,42 +1005,47 @@ class Paths
 				allowGPU
 			);
 
-		if (imageLoaded == null)
-			return null;
+		#if MODS_ALLOWED
+		var jsonExists:Bool = false;
 
-		var jsonPath:String =
+		var json:String = modsImagesJson(key);
+
+		if (FileSystem.exists(json))
+			jsonExists = true;
+
+		return FlxAtlasFrames.fromTexturePackerJson(
+			imageLoaded,
+			jsonExists
+				? File.getContent(json)
+				: getPath(
+					Language.getFileTranslation(
+						'images/$key'
+					) + '.json',
+					TEXT,
+					parentFolder
+				)
+		);
+		#else
+		return FlxAtlasFrames.fromTexturePackerJson(
+			imageLoaded,
 			getPath(
 				Language.getFileTranslation(
 					'images/$key'
 				) + '.json',
 				TEXT,
-				parentFolder,
-				false
-			);
-
-		if (!OpenFlAssets.exists(jsonPath, TEXT))
-		{
-			trace(
-				'Aseprite JSON not found: '
-				+ jsonPath
-			);
-
-			return null;
-		}
-
-		return FlxAtlasFrames.fromTexturePackerJson(
-			imageLoaded,
-			jsonPath
+				parentFolder
+			)
 		);
+		#end
 	}
 
-	/*
-	 * =========================================================
-	 * SONG PATH
-	 * =========================================================
-	 */
+	// ============================================================
+	// SONG PATH
+	// ============================================================
 
-	inline static public function formatToSongPath(path:String)
+	inline static public function formatToSongPath(
+		path:String
+	)
 	{
 		final invalidChars =
 			~/[~&;:<>#\s]/g;
@@ -970,11 +1065,9 @@ class Paths
 			.toLowerCase();
 	}
 
-	/*
-	 * =========================================================
-	 * SOUND CACHE
-	 * =========================================================
-	 */
+	// ============================================================
+	// SOUND CACHE
+	// ============================================================
 
 	public static var currentTrackedSounds:Map<String, Sound> = [];
 
@@ -991,7 +1084,7 @@ class Paths
 				+ '.$SOUND_EXT',
 				SOUND,
 				path,
-				false
+				modsAllowed
 			);
 
 		if (!currentTrackedSounds.exists(file))
@@ -1016,17 +1109,11 @@ class Paths
 			else if (beepOnNull)
 			{
 				trace(
-					'SOUND NOT FOUND: '
-					+ key
-					+ ', PATH: '
-					+ path
+					'SOUND NOT FOUND: $key, PATH: $path'
 				);
 
 				FlxG.log.error(
-					'SOUND NOT FOUND: '
-					+ key
-					+ ', PATH: '
-					+ path
+					'SOUND NOT FOUND: $key, PATH: $path'
 				);
 
 				return FlxAssets.getSound(
@@ -1040,17 +1127,9 @@ class Paths
 		return currentTrackedSounds.get(file);
 	}
 
-	/*
-	 * =========================================================
-	 * LEGACY MOD FUNCTIONS
-	 * =========================================================
-	 *
-	 * These are kept so other Psych Engine source files that
-	 * reference Paths.mods(), modsJson(), etc. don't immediately
-	 * fail to compile.
-	 *
-	 * They are NOT used by the BFEXEOPT asset resolver.
-	 */
+	// ============================================================
+	// LEGACY MOD SYSTEM
+	// ============================================================
 
 	#if MODS_ALLOWED
 
@@ -1058,22 +1137,30 @@ class Paths
 		key:String = ''
 	)
 	{
-		return #if mobile
+		return
+			#if mobile
 			Sys.getCwd() +
-		#end
-		'mods/' + key;
+			#end
+			'mods/' + key;
 	}
 
-	inline static public function modsJson(key:String)
-		return modFolders('data/' + key + '.json');
-
-	inline static public function modsVideo(key:String)
+	inline static public function modsJson(
+		key:String
+	)
+	{
 		return modFolders(
-			'videos/'
-			+ key
-			+ '.'
-			+ VIDEO_EXT
+			'data/' + key + '.json'
 		);
+	}
+
+	inline static public function modsVideo(
+		key:String
+	)
+	{
+		return modFolders(
+			'videos/' + key + '.' + VIDEO_EXT
+		);
+	}
 
 	inline static public function modsSounds(
 		path:String,
@@ -1081,43 +1168,49 @@ class Paths
 	)
 	{
 		return modFolders(
-			path
-			+ '/'
-			+ key
-			+ '.'
-			+ SOUND_EXT
+			path + '/' + key + '.' + SOUND_EXT
 		);
 	}
 
-	inline static public function modsImages(key:String)
+	inline static public function modsImages(
+		key:String
+	)
+	{
 		return modFolders(
-			'images/'
-			+ key
-			+ '.png'
+			'images/' + key + '.png'
 		);
+	}
 
-	inline static public function modsXml(key:String)
+	inline static public function modsXml(
+		key:String
+	)
+	{
 		return modFolders(
-			'images/'
-			+ key
-			+ '.xml'
+			'images/' + key + '.xml'
 		);
+	}
 
-	inline static public function modsTxt(key:String)
+	inline static public function modsTxt(
+		key:String
+	)
+	{
 		return modFolders(
-			'images/'
-			+ key
-			+ '.txt'
+			'images/' + key + '.txt'
 		);
+	}
 
-	inline static public function modsImagesJson(key:String)
+	inline static public function modsImagesJson(
+		key:String
+	)
+	{
 		return modFolders(
-			'images/'
-			+ key
-			+ '.json'
+			'images/' + key + '.json'
 		);
+	}
 
-	static public function modFolders(key:String)
+	static public function modFolders(
+		key:String
+	)
 	{
 		if (
 			Mods.currentModDirectory != null
@@ -1131,18 +1224,17 @@ class Paths
 					+ key
 				);
 
+			#if sys
 			if (FileSystem.exists(fileToCheck))
 				return fileToCheck;
+			#end
 
 			#if linux
-			else
-			{
-				var newPath:String =
-					findFile(key);
+			var newPath:String =
+				findFile(key);
 
-				if (newPath != null)
-					return newPath;
-			}
+			if (newPath != null)
+				return newPath;
 			#end
 		}
 
@@ -1150,40 +1242,44 @@ class Paths
 		{
 			var fileToCheck:String =
 				mods(
-					mod
-					+ '/'
-					+ key
+					mod + '/' + key
 				);
 
+			#if sys
 			if (FileSystem.exists(fileToCheck))
 				return fileToCheck;
+			#end
 
 			#if linux
-			else
-			{
-				var newPath:String =
-					findFile(key);
+			var newPath:String =
+				findFile(key);
 
-				if (newPath != null)
-					return newPath;
-			}
+			if (newPath != null)
+				return newPath;
 			#end
 		}
 
-		return #if mobile
+		return
+			#if mobile
 			Sys.getCwd() +
-		#end
-		('mods/' + key);
+			#end
+			('mods/' + key);
 	}
+
+	// ============================================================
+	// LINUX MOD SEARCH
+	// ============================================================
 
 	#if linux
 
-	static function findFile(key:String):String
+	static function findFile(
+		key:String
+	):String
 	{
 		var targetParts:Array<String> =
 			key
-			.replace('\\', '/')
-			.split('/');
+				.replace('\\', '/')
+				.split('/');
 
 		if (targetParts.length == 0)
 			return null;
@@ -1228,7 +1324,10 @@ class Paths
 		for (dir in dirs)
 		{
 			var node:String =
-				findNode(dir, key);
+				findNode(
+					dir,
+					key
+				);
 
 			if (node != null)
 				return dir + '/' + node;
@@ -1251,10 +1350,12 @@ class Paths
 				new Map();
 
 			for (file in allFiles)
+			{
 				fileMap.set(
 					file.toLowerCase(),
 					file
 				);
+			}
 
 			return fileMap.get(
 				key.toLowerCase()
@@ -1269,11 +1370,9 @@ class Paths
 	#end
 	#end
 
-	/*
-	 * =========================================================
-	 * FLXANIMATE
-	 * =========================================================
-	 */
+	// ============================================================
+	// FLXANIMATE
+	// ============================================================
 
 	#if flxanimate
 
@@ -1320,11 +1419,7 @@ class Paths
 				{
 					spriteJson =
 						getTextFromFile(
-							'images/'
-							+ originalPath
-							+ '/spritemap'
-							+ st
-							+ '.json'
+							'images/$originalPath/spritemap$st.json'
 						);
 
 					if (spriteJson != null)
@@ -1334,9 +1429,7 @@ class Paths
 
 						folderOrImg =
 							image(
-								originalPath
-								+ '/spritemap'
-								+ st
+								'$originalPath/spritemap$st'
 							);
 
 						break;
@@ -1344,11 +1437,7 @@ class Paths
 				}
 				else if (
 					fileExists(
-						'images/'
-						+ originalPath
-						+ '/spritemap'
-						+ st
-						+ '.png',
+						'images/$originalPath/spritemap$st.png',
 						IMAGE
 					)
 				)
@@ -1357,9 +1446,7 @@ class Paths
 
 					folderOrImg =
 						image(
-							originalPath
-							+ '/spritemap'
-							+ st
+							'$originalPath/spritemap$st'
 						);
 
 					break;
@@ -1369,6 +1456,7 @@ class Paths
 			if (!changedImage)
 			{
 				changedImage = true;
+
 				folderOrImg =
 					image(originalPath);
 			}
@@ -1379,9 +1467,7 @@ class Paths
 
 				animationJson =
 					getTextFromFile(
-						'images/'
-						+ originalPath
-						+ '/Animation.json'
+						'images/$originalPath/Animation.json'
 					);
 			}
 		}
@@ -1395,39 +1481,31 @@ class Paths
 
 	#end
 
-	/*
-	 * =========================================================
-	 * DIRECTORY READING
-	 * =========================================================
-	 */
+	// ============================================================
+	// DIRECTORY READER
+	// ============================================================
 
 	public static function readDirectory(
 		directory:String
 	):Array<String>
 	{
-		/*
-		 * For the standalone BFEXEOPT build, we first try
-		 * the real filesystem only when the requested path
-		 * is actually a filesystem path.
-		 */
+		#if MODS_ALLOWED
 
 		#if sys
-
-		if (FileSystem.exists(directory))
-			return FileSystem.readDirectory(
-				directory
-			);
-
+		return FileSystem.readDirectory(
+			directory
+		);
+		#else
+		return [];
 		#end
 
-		/*
-		 * Packaged OpenFL assets.
-		 */
+		#else
 
 		var dirs:Array<String> = [];
 
 		for (
-			dir in Assets.list()
+			dir in Assets
+				.list()
 				.filter(
 					folder ->
 						folder.startsWith(
@@ -1439,7 +1517,9 @@ class Paths
 			@:privateAccess
 			for (
 				library in
-				lime.utils.Assets.libraries.keys()
+					lime.utils.Assets
+						.libraries
+						.keys()
 			)
 			{
 				if (
@@ -1451,8 +1531,7 @@ class Paths
 						!dirs.contains(
 							'$library:$dir'
 						)
-						||
-						!dirs.contains(dir)
+						|| !dirs.contains(dir)
 					)
 				)
 				{
@@ -1473,9 +1552,10 @@ class Paths
 		return dirs.map(
 			dir ->
 				dir.substr(
-					dir.lastIndexOf("/")
-					+ 1
+					dir.lastIndexOf("/") + 1
 				)
 		);
+
+		#end
 	}
 }

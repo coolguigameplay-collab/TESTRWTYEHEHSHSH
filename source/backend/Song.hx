@@ -1,7 +1,7 @@
 package backend;
 
 import haxe.Json;
-import lime.utils.Assets;
+import openfl.utils.Assets as OpenFlAssets;
 
 import objects.Note;
 
@@ -25,7 +25,7 @@ typedef SwagSong =
 	@:optional var gameOverSound:String;
 	@:optional var gameOverLoop:String;
 	@:optional var gameOverEnd:String;
-	
+
 	@:optional var disableNoteRGB:Bool;
 
 	@:optional var arrowSkin:String;
@@ -50,137 +50,446 @@ class Song
 	public var events:Array<Dynamic>;
 	public var bpm:Float;
 	public var needsVoices:Bool = true;
+
 	public var arrowSkin:String;
 	public var splashSkin:String;
+
 	public var gameOverChar:String;
 	public var gameOverSound:String;
 	public var gameOverLoop:String;
 	public var gameOverEnd:String;
+
 	public var disableNoteRGB:Bool = false;
+
 	public var speed:Float = 1;
 	public var stage:String;
+
 	public var player1:String = 'bf';
 	public var player2:String = 'dad';
 	public var gfVersion:String = 'gf';
+
 	public var format:String = 'psych_v1';
 
-	public static function convert(songJson:Dynamic) // Convert old charts to psych_v1 format
+	/*
+	 * =========================================================
+	 * CHART CONVERSION
+	 * =========================================================
+	 */
+
+	public static function convert(songJson:Dynamic)
 	{
-		if(songJson.gfVersion == null)
+		/*
+		 * Old Psych charts used player3 for GF.
+		 */
+		if (songJson.gfVersion == null)
 		{
-			songJson.gfVersion = songJson.player3;
-			if(Reflect.hasField(songJson, 'player3')) Reflect.deleteField(songJson, 'player3');
+			songJson.gfVersion =
+				songJson.player3;
+
+			if (
+				Reflect.hasField(
+					songJson,
+					'player3'
+				)
+			)
+			{
+				Reflect.deleteField(
+					songJson,
+					'player3'
+				);
+			}
 		}
 
-		if(songJson.events == null)
+		/*
+		 * Old charts may not contain events.
+		 */
+		if (songJson.events == null)
 		{
 			songJson.events = [];
-			for (secNum in 0...songJson.notes.length)
-			{
-				var sec:SwagSection = songJson.notes[secNum];
 
-				var i:Int = 0;
-				var notes:Array<Dynamic> = sec.sectionNotes;
-				var len:Int = notes.length;
-				while(i < len)
+			if (songJson.notes != null)
+			{
+				for (
+					secNum in 0...songJson.notes.length
+				)
 				{
-					var note:Array<Dynamic> = notes[i];
-					if(note[1] < 0)
+					var sec:SwagSection =
+						songJson.notes[secNum];
+
+					var i:Int = 0;
+
+					var notes:Array<Dynamic> =
+						sec.sectionNotes;
+
+					var len:Int =
+						notes.length;
+
+					while (i < len)
 					{
-						songJson.events.push([note[0], [[note[2], note[3], note[4]]]]);
-						notes.remove(note);
-						len = notes.length;
+						var note:Array<Dynamic> =
+							notes[i];
+
+						if (note[1] < 0)
+						{
+							songJson.events.push(
+								[
+									note[0],
+									[
+										[
+											note[2],
+											note[3],
+											note[4]
+										]
+									]
+								]
+							);
+
+							notes.remove(note);
+
+							len =
+								notes.length;
+						}
+						else
+						{
+							i++;
+						}
 					}
-					else i++;
 				}
 			}
 		}
 
-		var sectionsData:Array<SwagSection> = songJson.notes;
-		if(sectionsData == null) return;
+		var sectionsData:Array<SwagSection> =
+			songJson.notes;
+
+		if (sectionsData == null)
+			return;
 
 		for (section in sectionsData)
 		{
-			var beats:Null<Float> = cast section.sectionBeats;
-			if (beats == null || Math.isNaN(beats))
+			var beats:Null<Float> =
+				cast section.sectionBeats;
+
+			if (
+				beats == null
+				|| Math.isNaN(beats)
+			)
 			{
 				section.sectionBeats = 4;
-				if(Reflect.hasField(section, 'lengthInSteps')) Reflect.deleteField(section, 'lengthInSteps');
+
+				if (
+					Reflect.hasField(
+						section,
+						'lengthInSteps'
+					)
+				)
+				{
+					Reflect.deleteField(
+						section,
+						'lengthInSteps'
+					);
+				}
 			}
+
+			if (section.sectionNotes == null)
+				continue;
 
 			for (note in section.sectionNotes)
 			{
-				var gottaHitNote:Bool = (note[1] < 4) ? section.mustHitSection : !section.mustHitSection;
-				note[1] = (note[1] % 4) + (gottaHitNote ? 0 : 4);
+				var gottaHitNote:Bool =
+					(note[1] < 4)
+						? section.mustHitSection
+						: !section.mustHitSection;
 
-				if(!Std.isOfType(note[3], String))
-					note[3] = Note.defaultNoteTypes[note[3]]; //compatibility with Week 7 and 0.1-0.3 psych charts
+				note[1] =
+					(note[1] % 4)
+					+ (
+						gottaHitNote
+							? 0
+							: 4
+					);
+
+				/*
+				 * Compatibility with old numeric note types.
+				 */
+				if (
+					!Std.isOfType(
+						note[3],
+						String
+					)
+				)
+				{
+					note[3] =
+						Note.defaultNoteTypes[
+							note[3]
+						];
+				}
 			}
 		}
 	}
+
+	/*
+	 * =========================================================
+	 * CURRENT CHART
+	 * =========================================================
+	 */
 
 	public static var chartPath:String;
 	public static var loadedSongName:String;
-	public static function loadFromJson(jsonInput:String, ?folder:String):SwagSong
+
+	public static function loadFromJson(
+		jsonInput:String,
+		?folder:String
+	):SwagSong
 	{
-		if(folder == null) folder = jsonInput;
-		PlayState.SONG = getChart(jsonInput, folder);
-		loadedSongName = folder;
-		chartPath = _lastPath;
+		if (folder == null)
+			folder = jsonInput;
+
+		PlayState.SONG =
+			getChart(
+				jsonInput,
+				folder
+			);
+
+		loadedSongName =
+			folder;
+
+		chartPath =
+			_lastPath;
+
 		#if windows
-		// prevent any saving errors by fixing the path on Windows (being the only OS to ever use backslashes instead of forward slashes for paths)
-		chartPath = chartPath.replace('/', '\\');
+		/*
+		 * Windows-only path normalization.
+		 */
+		chartPath =
+			chartPath.replace(
+				'/',
+				'\\'
+			);
 		#end
-		StageData.loadDirectory(PlayState.SONG);
+
+		/*
+		 * Load the stage belonging to the chart.
+		 */
+		if (PlayState.SONG != null)
+			StageData.loadDirectory(
+				PlayState.SONG
+			);
+
 		return PlayState.SONG;
 	}
 
+	/*
+	 * Last resolved chart path.
+	 */
 	static var _lastPath:String;
-	public static function getChart(jsonInput:String, ?folder:String):SwagSong
+
+	/*
+	 * =========================================================
+	 * LOAD CHART
+	 * =========================================================
+	 *
+	 * BFEXEOPT chart location:
+	 *
+	 * assets/BFEXEOPT/data/<song>/<song>.json
+	 *
+	 * Paths.json() handles the actual asset mapping.
+	 *
+	 * No mods/ directory is used here.
+	 */
+
+	public static function getChart(
+		jsonInput:String,
+		?folder:String
+	):SwagSong
 	{
-		if(folder == null) folder = jsonInput;
+		if (folder == null)
+			folder = jsonInput;
+
 		var rawData:String = null;
-		
-		var formattedFolder:String = Paths.formatToSongPath(folder);
-		var formattedSong:String = Paths.formatToSongPath(jsonInput);
-		_lastPath = Paths.json('$formattedFolder/$formattedSong');
 
-		#if MODS_ALLOWED
-		if(FileSystem.exists(_lastPath))
-			rawData = File.getContent(_lastPath);
-		else
-		#end
-			rawData = Assets.getText(_lastPath);
+		var formattedFolder:String =
+			Paths.formatToSongPath(
+				folder
+			);
 
-		return rawData != null ? parseJSON(rawData, jsonInput) : null;
-	}
+		var formattedSong:String =
+			Paths.formatToSongPath(
+				jsonInput
+			);
 
-	public static function parseJSON(rawData:String, ?nameForError:String = null, ?convertTo:String = 'psych_v1'):SwagSong
-	{
-		var songJson:SwagSong = cast Json.parse(rawData);
-		if(Reflect.hasField(songJson, 'song'))
+		/*
+		 * Paths.json() resolves the chart through
+		 * the BFEXEOPT content path.
+		 */
+		_lastPath =
+			Paths.json(
+				'$formattedFolder/$formattedSong'
+			);
+
+		/*
+		 * Packaged APK asset.
+		 */
+		if (
+			OpenFlAssets.exists(
+				_lastPath,
+				openfl.utils.AssetType.TEXT
+			)
+		)
 		{
-			var subSong:SwagSong = Reflect.field(songJson, 'song');
-			if(subSong != null && Type.typeof(subSong) == TObject)
-				songJson = subSong;
+			try
+			{
+				rawData =
+					OpenFlAssets.getText(
+						_lastPath
+					);
+			}
+			catch (e:Dynamic)
+			{
+				trace(
+					'Failed to read chart: '
+					+ _lastPath
+				);
+
+				trace(e);
+			}
+		}
+		else
+		{
+			trace(
+				'Chart not found: '
+				+ _lastPath
+			);
 		}
 
-		if(convertTo != null && convertTo.length > 0)
+		if (
+			rawData != null
+			&& rawData.length > 0
+		)
 		{
-			var fmt:String = songJson.format;
-			if(fmt == null) fmt = songJson.format = 'unknown';
+			return parseJSON(
+				rawData,
+				jsonInput
+			);
+		}
 
-			switch(convertTo)
+		return null;
+	}
+
+	/*
+	 * =========================================================
+	 * PARSE JSON
+	 * =========================================================
+	 */
+
+	public static function parseJSON(
+		rawData:String,
+		?nameForError:String = null,
+		?convertTo:String = 'psych_v1'
+	):SwagSong
+	{
+		if (
+			rawData == null
+			|| rawData.length == 0
+		)
+		{
+			return null;
+		}
+
+		var songJson:SwagSong;
+
+		try
+		{
+			songJson =
+				cast Json.parse(
+					rawData
+				);
+		}
+		catch (e:Dynamic)
+		{
+			trace(
+				'Failed to parse chart: '
+				+ nameForError
+			);
+
+			trace(e);
+
+			return null;
+		}
+
+		/*
+		 * Some older charts wrap the actual song
+		 * data inside a "song" object.
+		 */
+		if (
+			Reflect.hasField(
+				songJson,
+				'song'
+			)
+		)
+		{
+			var subSong:SwagSong =
+				Reflect.field(
+					songJson,
+					'song'
+				);
+
+			if (
+				subSong != null
+				&& Type.typeof(subSong)
+					== TObject
+			)
+			{
+				songJson =
+					subSong;
+			}
+		}
+
+		/*
+		 * Convert old chart formats to Psych 1.0.
+		 */
+		if (
+			convertTo != null
+			&& convertTo.length > 0
+		)
+		{
+			var fmt:String =
+				songJson.format;
+
+			if (fmt == null)
+			{
+				fmt =
+					songJson.format =
+						'unknown';
+			}
+
+			switch (convertTo)
 			{
 				case 'psych_v1':
-					if(!fmt.startsWith('psych_v1')) //Convert to Psych 1.0 format
+
+					if (
+						!fmt.startsWith(
+							'psych_v1'
+						)
+					)
 					{
-						trace('converting chart $nameForError with format $fmt to psych_v1 format...');
-						songJson.format = 'psych_v1_convert';
-						convert(songJson);
+						trace(
+							'converting chart '
+							+ nameForError
+							+ ' with format '
+							+ fmt
+							+ ' to psych_v1 format...'
+						);
+
+						songJson.format =
+							'psych_v1_convert';
+
+						convert(
+							songJson
+						);
 					}
 			}
 		}
+
 		return songJson;
 	}
 }

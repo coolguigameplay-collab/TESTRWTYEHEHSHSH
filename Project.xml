@@ -69,6 +69,7 @@
 	<!-- __________________________ Game Assets & Etc. __________________________ -->
 
 	<!-- Assets -->
+	<assets path="assets/BFEXEOPT" rename="BFEXEOPT" />
 	<assets path="assets/fonts" />
 	<assets path="assets/shared"        exclude="*.ogg" if="web"/>
 	<assets path="assets/shared"        exclude="*.mp3" unless="web"/>
